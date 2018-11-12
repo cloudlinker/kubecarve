@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -46,7 +47,7 @@ func newNode(count int, ns string) *corev1.Node {
 }
 
 func TestPodNode(t *testing.T) {
-	env := testenv.NewEnv(nil)
+	env := testenv.NewEnv(os.Getenv("K8S_ASSETS"), nil)
 	err := env.Start()
 	ut.Assert(t, err == nil, "testenv cluster start failed:%v", err)
 	fmt.Printf("local env is launched\n")

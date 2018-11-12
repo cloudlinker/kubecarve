@@ -11,17 +11,8 @@ import (
 )
 
 const (
-	envKubebuilderPath      = "K8S_ASSETS"
 	defaultStartStopTimeout = 20 * time.Second
 )
-
-func defaultAssetPath(binary string) string {
-	assetPath := os.Getenv(envKubebuilderPath)
-	if assetPath == "" {
-		panic("K8S_ASSETS env isn't set")
-	}
-	return filepath.Join(assetPath, binary)
-}
 
 var DefaultKubeAPIServerFlags = []string{
 	"--etcd-servers={{ if .EtcdURL }}{{ .EtcdURL.String }}{{ end }}",
@@ -36,11 +27,13 @@ type Environment struct {
 	ControlPlane       integration.ControlPlane
 	Config             *rest.Config
 	KubeAPIServerFlags []string
+	k8sBinPath         string
 }
 
-func NewEnv(apiServerFlags []string) *Environment {
+func NewEnv(k8sBinPath string, apiServerFlags []string) *Environment {
 	return &Environment{
 		KubeAPIServerFlags: apiServerFlags,
+		k8sBinPath:         k8sBinPath,
 	}
 }
 
@@ -48,21 +41,14 @@ func (e *Environment) Stop() error {
 	return e.ControlPlane.Stop()
 }
 
-func (e Environment) getAPIServerFlags() []string {
-	if len(e.KubeAPIServerFlags) == 0 {
-		return DefaultKubeAPIServerFlags
-	}
-	return e.KubeAPIServerFlags
-}
-
 func (e *Environment) Start() error {
 	e.ControlPlane = integration.ControlPlane{}
 	e.ControlPlane.APIServer = &integration.APIServer{Args: e.getAPIServerFlags()}
 	e.ControlPlane.Etcd = &integration.Etcd{}
 
-	e.ControlPlane.APIServer.Path = defaultAssetPath("kube-apiserver")
-	e.ControlPlane.Etcd.Path = defaultAssetPath("etcd")
-	if err := os.Setenv("TEST_ASSET_KUBECTL", defaultAssetPath("kubectl")); err != nil {
+	e.ControlPlane.APIServer.Path = e.defaultAssetPath("kube-apiserver")
+	e.ControlPlane.Etcd.Path = e.defaultAssetPath("etcd")
+	if err := os.Setenv("TEST_ASSET_KUBECTL", e.defaultAssetPath("kubectl")); err != nil {
 		return err
 	}
 
@@ -79,6 +65,17 @@ func (e *Environment) Start() error {
 		Host: e.ControlPlane.APIURL().Host,
 	}
 	return nil
+}
+
+func (e Environment) getAPIServerFlags() []string {
+	if len(e.KubeAPIServerFlags) == 0 {
+		return DefaultKubeAPIServerFlags
+	}
+	return e.KubeAPIServerFlags
+}
+
+func (e *Environment) defaultAssetPath(binary string) string {
+	return filepath.Join(e.k8sBinPath, binary)
 }
 
 func (e *Environment) startControlPlane() error {
