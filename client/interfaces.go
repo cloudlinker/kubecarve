@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-type ObjectKey = types.NamespacedName
+type ObjectKey = types.NamespacedName //"<namespace>/<name>"
 
 func ObjectKeyFromObject(obj runtime.Object) (ObjectKey, error) {
 	accessor, err := meta.Accessor(obj)
@@ -44,16 +44,6 @@ type Client interface {
 	Reader
 	Writer
 	StatusClient
-}
-
-// IndexerFunc knows how to take an object and turn it into a series
-// of (non-namespaced) keys for that object.
-type IndexerFunc func(runtime.Object) []string
-
-// FieldIndexer knows how to index over a particular "field" such that it
-// can later be used by a field selector.
-type FieldIndexer interface {
-	IndexField(obj runtime.Object, field string, extractValue IndexerFunc) error
 }
 
 type DeleteOptions struct {

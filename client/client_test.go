@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	ut "github.com/cloudlinker/cement/unittest"
@@ -50,10 +51,8 @@ func TestPodNode(t *testing.T) {
 	env := testenv.NewEnv(os.Getenv("K8S_ASSETS"), nil)
 	err := env.Start()
 	ut.Assert(t, err == nil, "testenv cluster start failed:%v", err)
-	fmt.Printf("local env is launched\n")
 	defer func() {
 		env.Stop()
-		fmt.Printf("local env is stopped\n")
 	}()
 
 	clientset, err := kubernetes.NewForConfig(env.Config)
@@ -68,6 +67,12 @@ func TestPodNode(t *testing.T) {
 	actual, err := clientset.AppsV1().Deployments(ns).Get(dep.Name, metav1.GetOptions{})
 	ut.Assert(t, err == nil, "get deploy failed:%v", err)
 	ut.Equal(t, dep, actual)
+
+	var expectedDep appsv1.Deployment
+	err = c.Get(context.TODO(), types.NamespacedName{ns, dep.Name}, &expectedDep)
+	ut.Assert(t, err == nil, "get deploy failed:%v", err)
+	ut.Equal(t, actual, &expectedDep)
+
 	err = c.Delete(context.TODO(), dep)
 	ut.Assert(t, err == nil, "delete deploy failed:%v", err)
 	_, err = clientset.AppsV1().Deployments(ns).Get(dep.Name, metav1.GetOptions{})

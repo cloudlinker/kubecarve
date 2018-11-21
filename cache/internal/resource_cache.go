@@ -17,17 +17,24 @@ import (
 	"github.com/cloudlinker/kubecarve/client"
 )
 
-var _ client.Reader = &CacheReader{}
+var _ client.Reader = &ResourceCache{}
 
-type CacheReader struct {
-	indexer          cache.Indexer
-	groupVersionKind schema.GroupVersionKind
+type ResourceCache struct {
+	cache.SharedIndexInformer
+	groupVersionKind schema.GroupVersionKind //this field only used to generate error :(
 }
 
-func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out runtime.Object) error {
+func newResourceCache(informer cache.SharedIndexInformer, groupVersionKind schema.GroupVersionKind) *ResourceCache {
+	return &ResourceCache{
+		SharedIndexInformer: informer,
+		groupVersionKind:    groupVersionKind,
+	}
+}
+
+func (c *ResourceCache) Get(_ context.Context, key client.ObjectKey, out runtime.Object) error {
 	storeKey := objectKeyToStoreKey(key)
 
-	obj, exists, err := c.indexer.GetByKey(storeKey)
+	obj, exists, err := c.GetIndexer().GetByKey(storeKey)
 	if err != nil {
 		return err
 	}
@@ -53,7 +60,7 @@ func (c *CacheReader) Get(_ context.Context, key client.ObjectKey, out runtime.O
 	return nil
 }
 
-func (c *CacheReader) List(ctx context.Context, opts *client.ListOptions, out runtime.Object) error {
+func (c *ResourceCache) List(ctx context.Context, opts *client.ListOptions, out runtime.Object) error {
 	var objs []interface{}
 	var err error
 
@@ -62,11 +69,11 @@ func (c *CacheReader) List(ctx context.Context, opts *client.ListOptions, out ru
 		if !requiresExact {
 			return fmt.Errorf("non-exact field matches are not supported by the cache")
 		}
-		objs, err = c.indexer.ByIndex(FieldIndexName(field), KeyToNamespacedKey(opts.Namespace, val))
+		objs, err = c.GetIndexer().ByIndex(FieldIndexName(field), KeyToNamespacedKey(opts.Namespace, val))
 	} else if opts != nil && opts.Namespace != "" {
-		objs, err = c.indexer.ByIndex(cache.NamespaceIndex, opts.Namespace)
+		objs, err = c.GetIndexer().ByIndex(cache.NamespaceIndex, opts.Namespace)
 	} else {
-		objs = c.indexer.List()
+		objs = c.GetIndexer().List()
 	}
 	if err != nil {
 		return err
@@ -83,7 +90,7 @@ func (c *CacheReader) List(ctx context.Context, opts *client.ListOptions, out ru
 	return apimeta.SetList(out, outItems)
 }
 
-func (c *CacheReader) getListItems(objs []interface{}, labelSel labels.Selector) ([]runtime.Object, error) {
+func (c *ResourceCache) getListItems(objs []interface{}, labelSel labels.Selector) ([]runtime.Object, error) {
 	outItems := make([]runtime.Object, 0, len(objs))
 	for _, item := range objs {
 		obj, isObj := item.(runtime.Object)

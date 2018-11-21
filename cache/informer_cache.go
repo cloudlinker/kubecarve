@@ -17,30 +17,28 @@ import (
 )
 
 var (
-	_ Informers     = &informerCache{}
-	_ client.Reader = &informerCache{}
-	_ Cache         = &informerCache{}
+	_ Cache = &informerCache{}
 )
 
 type informerCache struct {
 	*internal.InformersMap
 }
 
-func (ip *informerCache) Get(ctx context.Context, key client.ObjectKey, out runtime.Object) error {
-	gvk, err := apiutil.GVKForObject(out, ip.Scheme)
+func (c *informerCache) Get(ctx context.Context, key client.ObjectKey, out runtime.Object) error {
+	gvk, err := apiutil.GVKForObject(out, c.Scheme)
 	if err != nil {
 		return err
 	}
 
-	cache, err := ip.InformersMap.Get(gvk, out)
+	reader, err := c.InformersMap.GetInformer(gvk)
 	if err != nil {
 		return err
 	}
-	return cache.Reader.Get(ctx, key, out)
+	return reader.Get(ctx, key, out)
 }
 
-func (ip *informerCache) List(ctx context.Context, opts *client.ListOptions, out runtime.Object) error {
-	gvk, err := apiutil.GVKForObject(out, ip.Scheme)
+func (c *informerCache) List(ctx context.Context, opts *client.ListOptions, out runtime.Object) error {
+	gvk, err := apiutil.GVKForObject(out, c.Scheme)
 	if err != nil {
 		return err
 	}
@@ -50,8 +48,6 @@ func (ip *informerCache) List(ctx context.Context, opts *client.ListOptions, out
 	}
 
 	gvk.Kind = gvk.Kind[:len(gvk.Kind)-4]
-	var cacheTypeObj runtime.Object
-
 	itemsPtr, err := apimeta.GetItemsPtr(out)
 	if err != nil {
 		return nil
@@ -59,53 +55,39 @@ func (ip *informerCache) List(ctx context.Context, opts *client.ListOptions, out
 
 	elemType := reflect.Indirect(reflect.ValueOf(itemsPtr)).Type().Elem()
 	cacheTypeValue := reflect.Zero(reflect.PtrTo(elemType))
-	var ok bool
-	cacheTypeObj, ok = cacheTypeValue.Interface().(runtime.Object)
-	if !ok {
+	if _, ok := cacheTypeValue.Interface().(runtime.Object); ok == false {
 		return fmt.Errorf("cannot get cache for %T, its element %T is not a runtime.Object", out, cacheTypeValue.Interface())
 	}
 
-	cache, err := ip.InformersMap.Get(gvk, cacheTypeObj)
+	reader, err := c.InformersMap.GetInformer(gvk)
 	if err != nil {
 		return err
 	}
 
-	return cache.Reader.List(ctx, opts, out)
+	return reader.List(ctx, opts, out)
 }
 
-func (ip *informerCache) GetInformerForKind(gvk schema.GroupVersionKind) (cache.SharedIndexInformer, error) {
-	obj, err := ip.Scheme.New(gvk)
-	if err != nil {
-		return nil, err
-	}
-	i, err := ip.InformersMap.Get(gvk, obj)
-	if err != nil {
-		return nil, err
-	}
-	return i.Informer, err
+func (c *informerCache) GetInformerForKind(gvk schema.GroupVersionKind) (cache.SharedIndexInformer, error) {
+	return c.InformersMap.GetInformer(gvk)
 }
 
-func (ip *informerCache) GetInformer(obj runtime.Object) (cache.SharedIndexInformer, error) {
-	gvk, err := apiutil.GVKForObject(obj, ip.Scheme)
+func (c *informerCache) GetInformer(obj runtime.Object) (cache.SharedIndexInformer, error) {
+	gvk, err := apiutil.GVKForObject(obj, c.Scheme)
 	if err != nil {
 		return nil, err
 	}
-	i, err := ip.InformersMap.Get(gvk, obj)
-	if err != nil {
-		return nil, err
-	}
-	return i.Informer, err
+	return c.InformersMap.GetInformer(gvk)
 }
 
-func (ip *informerCache) IndexField(obj runtime.Object, field string, extractValue client.IndexerFunc) error {
-	informer, err := ip.GetInformer(obj)
+func (c *informerCache) IndexField(obj runtime.Object, field string, extractValue IndexerFunc) error {
+	informer, err := c.GetInformer(obj)
 	if err != nil {
 		return err
 	}
 	return indexByField(informer.GetIndexer(), field, extractValue)
 }
 
-func indexByField(indexer cache.Indexer, field string, extractor client.IndexerFunc) error {
+func indexByField(indexer cache.Indexer, field string, extractor IndexerFunc) error {
 	indexFunc := func(objRaw interface{}) ([]string, error) {
 		obj, isObj := objRaw.(runtime.Object)
 		if !isObj {
