@@ -26,7 +26,7 @@ func NewInformersMap(config *rest.Config,
 		config:         config,
 		Scheme:         scheme,
 		mapper:         mapper,
-		informersByGVK: make(map[schema.GroupVersionKind]*ResourceCache),
+		informersByGVK: make(map[schema.GroupVersionKind]*ResourceInformer),
 		codecs:         serializer.NewCodecFactory(scheme),
 		paramCodec:     runtime.NewParameterCodec(scheme),
 		resync:         resync,
@@ -39,7 +39,7 @@ type InformersMap struct {
 	Scheme         *runtime.Scheme
 	config         *rest.Config
 	mapper         meta.RESTMapper
-	informersByGVK map[schema.GroupVersionKind]*ResourceCache
+	informersByGVK map[schema.GroupVersionKind]*ResourceInformer
 	codecs         serializer.CodecFactory
 	paramCodec     runtime.ParameterCodec
 	stop           <-chan struct{}
@@ -78,7 +78,7 @@ func (m *InformersMap) hasSyncedFuncs() []cache.InformerSynced {
 	return syncedFuncs
 }
 
-func (m *InformersMap) GetInformer(gvk schema.GroupVersionKind) (*ResourceCache, error) {
+func (m *InformersMap) GetInformer(gvk schema.GroupVersionKind) (*ResourceInformer, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -89,7 +89,7 @@ func (m *InformersMap) GetInformer(gvk schema.GroupVersionKind) (*ResourceCache,
 	}
 }
 
-func (m *InformersMap) createResourceCache(gvk schema.GroupVersionKind) (*ResourceCache, error) {
+func (m *InformersMap) createResourceCache(gvk schema.GroupVersionKind) (*ResourceInformer, error) {
 	lw, err := m.createListWatcher(gvk)
 	if err != nil {
 		return nil, err

@@ -17,21 +17,21 @@ import (
 	"github.com/cloudlinker/kubecarve/client"
 )
 
-var _ client.Reader = &ResourceCache{}
+var _ client.Reader = &ResourceInformer{}
 
-type ResourceCache struct {
+type ResourceInformer struct {
 	cache.SharedIndexInformer
 	groupVersionKind schema.GroupVersionKind //this field only used to generate error :(
 }
 
-func newResourceCache(informer cache.SharedIndexInformer, groupVersionKind schema.GroupVersionKind) *ResourceCache {
-	return &ResourceCache{
+func newResourceCache(informer cache.SharedIndexInformer, groupVersionKind schema.GroupVersionKind) *ResourceInformer {
+	return &ResourceInformer{
 		SharedIndexInformer: informer,
 		groupVersionKind:    groupVersionKind,
 	}
 }
 
-func (c *ResourceCache) Get(_ context.Context, key client.ObjectKey, out runtime.Object) error {
+func (c *ResourceInformer) Get(_ context.Context, key client.ObjectKey, out runtime.Object) error {
 	storeKey := objectKeyToStoreKey(key)
 
 	obj, exists, err := c.GetIndexer().GetByKey(storeKey)
@@ -60,7 +60,7 @@ func (c *ResourceCache) Get(_ context.Context, key client.ObjectKey, out runtime
 	return nil
 }
 
-func (c *ResourceCache) List(ctx context.Context, opts *client.ListOptions, out runtime.Object) error {
+func (c *ResourceInformer) List(ctx context.Context, opts *client.ListOptions, out runtime.Object) error {
 	var objs []interface{}
 	var err error
 
@@ -90,7 +90,7 @@ func (c *ResourceCache) List(ctx context.Context, opts *client.ListOptions, out 
 	return apimeta.SetList(out, outItems)
 }
 
-func (c *ResourceCache) getListItems(objs []interface{}, labelSel labels.Selector) ([]runtime.Object, error) {
+func (c *ResourceInformer) getListItems(objs []interface{}, labelSel labels.Selector) ([]runtime.Object, error) {
 	outItems := make([]runtime.Object, 0, len(objs))
 	for _, item := range objs {
 		obj, isObj := item.(runtime.Object)
