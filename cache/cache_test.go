@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	kcache "k8s.io/client-go/tools/cache"
 
 	ut "github.com/cloudlinker/cement/unittest"
@@ -95,10 +97,71 @@ func TestPodCache(t *testing.T) {
 		out <- obj
 	}
 	informer.AddEventHandler(kcache.ResourceEventHandlerFuncs{AddFunc: addFunc})
+	//sync the state, which will return 3 pod
 	for i := 0; i < 3; i++ {
 		<-out
 	}
 	err = cli.Create(context.TODO(), newPod("test-pod-4", testNamespaceOne, map[string]string{"test-label": "test-pod-4"}, corev1.RestartPolicyOnFailure))
 	newCreatePod := <-out
 	ut.Equal(t, newCreatePod.(*corev1.Pod).Labels["test-label"], "test-pod-4")
+
+	pods = corev1.PodList{}
+	listOpt = &client.ListOptions{}
+	c.List(context.TODO(), listOpt, &pods)
+	ut.Equal(t, len(pods.Items), 4)
+
+	err = cli.Delete(context.TODO(), newPod("test-pod-1", testNamespaceOne, nil, corev1.RestartPolicyNever))
+	ut.Assert(t, err == nil, "delete pod failed:%v", err)
+	err = cli.Delete(context.TODO(), newPod("test-pod-2", testNamespaceTwo, nil, corev1.RestartPolicyAlways))
+	ut.Assert(t, err == nil, "delete pod failed:%v", err)
+	err = cli.Delete(context.TODO(), newPod("test-pod-3", testNamespaceTwo, nil, corev1.RestartPolicyOnFailure))
+	ut.Assert(t, err == nil, "delete pod failed:%v", err)
+	err = cli.Delete(context.TODO(), newPod("test-pod-4", testNamespaceOne, nil, corev1.RestartPolicyOnFailure))
+	ut.Assert(t, err == nil, "delete pod failed:%v", err)
+
+	<-time.After(time.Second)
+	pods = corev1.PodList{}
+	c.List(context.TODO(), listOpt, &pods)
+	ut.Equal(t, len(pods.Items), 0)
+}
+
+func TestPodCacheIndex(t *testing.T) {
+	env := testenv.NewEnv(os.Getenv("K8S_ASSETS"), nil)
+	err := env.Start()
+	ut.Assert(t, err == nil, "testenv cluster start failed:%v", err)
+	defer func() {
+		env.Stop()
+	}()
+
+	cli, err := client.New(env.Config, client.Options{})
+	ut.Assert(t, err == nil, "create client failed:%v", err)
+
+	testNamespaceOne := "test-namespace-1"
+	testNamespaceTwo := "test-namespace-2"
+	err = cli.Create(context.TODO(), newPod("test-pod-1", testNamespaceOne, map[string]string{"test-label": "test-pod-1"}, corev1.RestartPolicyNever))
+	ut.Assert(t, err == nil, "create pod failed:%v", err)
+	err = cli.Create(context.TODO(), newPod("test-pod-2", testNamespaceTwo, map[string]string{"test-label": "test-pod-2"}, corev1.RestartPolicyAlways))
+	ut.Assert(t, err == nil, "create pod failed:%v", err)
+	err = cli.Create(context.TODO(), newPod("test-pod-3", testNamespaceTwo, map[string]string{"test-label": "test-pod-3"}, corev1.RestartPolicyOnFailure))
+	ut.Assert(t, err == nil, "create pod failed:%v", err)
+
+	stop := make(chan struct{})
+	defer close(stop)
+	c, err := New(env.Config, Options{})
+	ut.Assert(t, err == nil, "create cache failed:%v", err)
+	indexFunc := func(obj runtime.Object) []string {
+		return []string{string(obj.(*corev1.Pod).Spec.RestartPolicy)}
+	}
+	c.IndexField(&corev1.Pod{}, "spec.restartPolicy", indexFunc)
+	ut.Assert(t, err == nil, "index pod failed:%v", err)
+
+	go c.Start(stop)
+	ut.Assert(t, c.WaitForCacheSync(stop), "wait for sync should ok")
+
+	pods := corev1.PodList{}
+	listOpt := &client.ListOptions{}
+	listOpt.MatchingField("spec.restartPolicy", "OnFailure")
+	c.List(context.TODO(), listOpt, &pods)
+	ut.Equal(t, len(pods.Items), 1)
+	ut.Equal(t, pods.Items[0].Name, "test-pod-3")
 }
