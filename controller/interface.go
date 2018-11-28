@@ -9,5 +9,5 @@ import (
 
 type Controller interface {
 	Watch(obj runtime.Object, predicates ...predicate.Predicate) error
-	Start(handler handler.EventHandler, stop <-chan struct{}) error
+	Start(handler handler.EventHandler, stop <-chan struct{})
 }

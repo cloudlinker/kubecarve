@@ -3,7 +3,7 @@ package eventsource
 import (
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/cloudlinker/kubecarve/cache"
 	"github.com/cloudlinker/kubecarve/predicate"
@@ -14,21 +14,21 @@ const (
 )
 
 type resourceEventSource struct {
-	typ   runtime.Object
+	gvk   schema.GroupVersionKind
 	cache cache.Cache
 }
 
 var _ EventSource = &resourceEventSource{}
 
-func New(typ runtime.Object, cache cache.Cache) EventSource {
+func New(gvk schema.GroupVersionKind, cache cache.Cache) EventSource {
 	return &resourceEventSource{
-		typ:   typ,
+		gvk:   gvk,
 		cache: cache,
 	}
 }
 
 func (l *resourceEventSource) GetEventChannel(predicates ...predicate.Predicate) (<-chan interface{}, error) {
-	i, err := l.cache.GetInformer(l.typ)
+	i, err := l.cache.GetInformerForKind(l.gvk)
 	if err != nil {
 		return nil, err
 	}
@@ -39,8 +39,5 @@ func (l *resourceEventSource) GetEventChannel(predicates ...predicate.Predicate)
 }
 
 func (l *resourceEventSource) String() string {
-	if l.typ != nil && l.typ.GetObjectKind() != nil {
-		return fmt.Sprintf("kind source: %v", l.typ.GetObjectKind().GroupVersionKind().String())
-	}
-	return fmt.Sprintf("kind source: unknown GVK")
+	return fmt.Sprintf("kind source: %v", l.gvk.String())
 }
