@@ -4,56 +4,54 @@ import (
 	"github.com/cloudlinker/kubecarve/event"
 )
 
-type Predicate interface {
-	IgnoreCreate(event.CreateEvent) bool
-	IgnoreDelete(event.DeleteEvent) bool
-	IgnoreUpdate(event.UpdateEvent) bool
-	IgnoreGeneric(event.GenericEvent) bool
-}
-
-var _ Predicate = Funcs{}
-var _ Predicate = ResourceVersionChangedPredicate{}
-
-type Funcs struct {
+type funcs struct {
 	IgnoreCreateFunc  func(event.CreateEvent) bool
 	IgnoreDeleteFunc  func(event.DeleteEvent) bool
 	IgnoreUpdateFunc  func(event.UpdateEvent) bool
 	IgnoreGenericFunc func(event.GenericEvent) bool
 }
 
-func (p Funcs) IgnoreCreate(e event.CreateEvent) bool {
+func NewDefaultPredicate() Predicate {
+	return funcs{}
+}
+
+func (p funcs) IgnoreCreate(e event.CreateEvent) bool {
 	if p.IgnoreCreateFunc != nil {
 		return p.IgnoreCreateFunc(e)
 	}
 	return false
 }
 
-func (p Funcs) IgnoreDelete(e event.DeleteEvent) bool {
+func (p funcs) IgnoreDelete(e event.DeleteEvent) bool {
 	if p.IgnoreDeleteFunc != nil {
 		return p.IgnoreDeleteFunc(e)
 	}
 	return false
 }
 
-func (p Funcs) IgnoreUpdate(e event.UpdateEvent) bool {
+func (p funcs) IgnoreUpdate(e event.UpdateEvent) bool {
 	if p.IgnoreUpdateFunc != nil {
 		return p.IgnoreUpdateFunc(e)
 	}
 	return false
 }
 
-func (p Funcs) IgnoreGeneric(e event.GenericEvent) bool {
+func (p funcs) IgnoreGeneric(e event.GenericEvent) bool {
 	if p.IgnoreGenericFunc != nil {
 		return p.IgnoreGenericFunc(e)
 	}
 	return false
 }
 
-type ResourceVersionChangedPredicate struct {
-	Funcs
+type ignoreUnchangedUpdate struct {
+	funcs
 }
 
-func (ResourceVersionChangedPredicate) IgnoreUpdate(e event.UpdateEvent) bool {
+func NewIgnoreUnchangedUpdate() Predicate {
+	return ignoreUnchangedUpdate{}
+}
+
+func (ignoreUnchangedUpdate) IgnoreUpdate(e event.UpdateEvent) bool {
 	if e.MetaOld == nil ||
 		e.ObjectOld == nil ||
 		e.ObjectNew == nil ||

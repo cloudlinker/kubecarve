@@ -11,16 +11,12 @@ import (
 	"k8s.io/client-go/tools/record"
 )
 
-type EventPublisher interface {
-	GetEventRecorderFor(name string) record.EventRecorder
-}
-
 type publisher struct {
 	scheme           *runtime.Scheme
 	eventBroadcaster record.EventBroadcaster
 }
 
-func NewPublisher(config *rest.Config, scheme *runtime.Scheme) (EventPublisher, error) {
+func New(config *rest.Config, scheme *runtime.Scheme) (EventPublisher, error) {
 	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init clientSet: %v", err)

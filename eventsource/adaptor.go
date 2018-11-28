@@ -1,30 +1,26 @@
-package source
+package eventsource
 
 import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 
 	"github.com/cloudlinker/kubecarve/event"
-	"github.com/cloudlinker/kubecarve/handler"
 	"github.com/cloudlinker/kubecarve/predicate"
 )
 
 var _ cache.ResourceEventHandler = &HandlerAdaptor{}
 
 type HandlerAdaptor struct {
-	handler    handler.EventHandler
-	queue      workqueue.RateLimitingInterface
 	predicates []predicate.Predicate
+	ch         chan<- interface{}
 }
 
-func newHandlerAdaptor(handler handler.EventHandler, queue workqueue.RateLimitingInterface, predicates []predicate.Predicate) *HandlerAdaptor {
+func newHandlerAdaptor(predicates []predicate.Predicate, ch chan<- interface{}) *HandlerAdaptor {
 	return &HandlerAdaptor{
-		handler:    handler,
-		queue:      queue,
 		predicates: predicates,
+		ch:         ch,
 	}
 }
 
@@ -49,7 +45,7 @@ func (h *HandlerAdaptor) OnAdd(obj interface{}) {
 		}
 	}
 
-	h.handler.Create(c, h.queue)
+	h.ch <- c
 }
 
 func (h *HandlerAdaptor) OnUpdate(oldObj, newObj interface{}) {
@@ -85,7 +81,7 @@ func (h *HandlerAdaptor) OnUpdate(oldObj, newObj interface{}) {
 		}
 	}
 
-	h.handler.Update(u, h.queue)
+	h.ch <- u
 }
 
 func (h *HandlerAdaptor) OnDelete(obj interface{}) {
@@ -125,5 +121,5 @@ func (h *HandlerAdaptor) OnDelete(obj interface{}) {
 		}
 	}
 
-	h.handler.Delete(d, h.queue)
+	h.ch <- d
 }
