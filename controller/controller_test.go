@@ -15,6 +15,7 @@ import (
 	"github.com/cloudlinker/kubecarve/client"
 	"github.com/cloudlinker/kubecarve/event"
 	"github.com/cloudlinker/kubecarve/handler"
+	"github.com/cloudlinker/kubecarve/predicate"
 	"github.com/cloudlinker/kubecarve/testenv"
 )
 
@@ -86,11 +87,12 @@ func TestController(t *testing.T) {
 	ctrl := New("dumbController", c, scheme.Scheme)
 	ctrl.Watch(&corev1.Pod{})
 	handler := &dumbEventHandler{}
-	go ctrl.Start(handler, stop)
+	go ctrl.Start(stop, handler, predicate.NewIgnoreUnchangedUpdate())
 
 	testNamespaceOne := "test-namespace-1"
 	testNamespaceTwo := "test-namespace-2"
-	err = cli.Create(context.TODO(), newPod("test-pod-1", testNamespaceOne, map[string]string{"test-label": "test-pod-1"}, corev1.RestartPolicyNever))
+	pod1 := newPod("test-pod-1", testNamespaceOne, map[string]string{"test-label": "test-pod-1"}, corev1.RestartPolicyNever)
+	err = cli.Create(context.TODO(), pod1)
 	ut.Assert(t, err == nil, "create pod failed:%v", err)
 	err = cli.Create(context.TODO(), newPod("test-pod-2", testNamespaceTwo, map[string]string{"test-label": "test-pod-2"}, corev1.RestartPolicyAlways))
 	ut.Assert(t, err == nil, "create pod failed:%v", err)
@@ -101,4 +103,23 @@ func TestController(t *testing.T) {
 	ut.Equal(t, handler.podCreateEvent, 3)
 	ut.Equal(t, handler.podUpdateEventCount, 0)
 	ut.Equal(t, handler.podDeleteEventCount, 0)
+
+	pod1.Spec.Containers[0].Image = "nginxv2"
+	err = cli.Update(context.TODO(), pod1)
+	ut.Assert(t, err == nil, "update pod failed:%v", err)
+	<-time.After(time.Second)
+	ut.Equal(t, handler.podUpdateEventCount, 1)
+
+	//nothing changed
+	err = cli.Update(context.TODO(), pod1)
+	ut.Assert(t, err == nil, "update pod failed:%v", err)
+	<-time.After(time.Second)
+	ut.Equal(t, handler.podUpdateEventCount, 1)
+
+	err = cli.Delete(context.TODO(), pod1)
+	ut.Assert(t, err == nil, "delete pod failed:%v", err)
+	<-time.After(time.Second)
+	ut.Equal(t, handler.podDeleteEventCount, 1)
+	ut.Equal(t, handler.podUpdateEventCount, 2) //delete will cause update event
+	ut.Equal(t, handler.podCreateEvent, 3)
 }

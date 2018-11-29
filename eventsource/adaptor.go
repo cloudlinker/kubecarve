@@ -7,20 +7,17 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/cloudlinker/kubecarve/event"
-	"github.com/cloudlinker/kubecarve/predicate"
 )
 
 var _ cache.ResourceEventHandler = &HandlerAdaptor{}
 
 type HandlerAdaptor struct {
-	predicates []predicate.Predicate
-	ch         chan<- interface{}
+	ch chan<- interface{}
 }
 
-func newHandlerAdaptor(predicates []predicate.Predicate, ch chan<- interface{}) *HandlerAdaptor {
+func newHandlerAdaptor(ch chan<- interface{}) *HandlerAdaptor {
 	return &HandlerAdaptor{
-		predicates: predicates,
-		ch:         ch,
+		ch: ch,
 	}
 }
 
@@ -37,12 +34,6 @@ func (h *HandlerAdaptor) OnAdd(obj interface{}) {
 		c.Object = o
 	} else {
 		return
-	}
-
-	for _, p := range h.predicates {
-		if p.IgnoreCreate(c) {
-			return
-		}
 	}
 
 	h.ch <- c
@@ -73,12 +64,6 @@ func (h *HandlerAdaptor) OnUpdate(oldObj, newObj interface{}) {
 		u.ObjectNew = o
 	} else {
 		return
-	}
-
-	for _, p := range h.predicates {
-		if p.IgnoreUpdate(u) {
-			return
-		}
 	}
 
 	h.ch <- u
@@ -113,12 +98,6 @@ func (h *HandlerAdaptor) OnDelete(obj interface{}) {
 		d.Object = o
 	} else {
 		return
-	}
-
-	for _, p := range h.predicates {
-		if p.IgnoreDelete(d) {
-			return
-		}
 	}
 
 	h.ch <- d

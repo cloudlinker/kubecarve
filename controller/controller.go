@@ -18,12 +18,13 @@ import (
 )
 
 type controller struct {
-	name    string
-	handler handler.EventHandler
-	cache   cache.Cache
-	sources map[schema.GroupVersionKind]<-chan interface{}
-	queue   workqueue.RateLimitingInterface
-	scheme  *runtime.Scheme
+	name       string
+	handler    handler.EventHandler
+	predicates []predicate.Predicate
+	cache      cache.Cache
+	sources    map[schema.GroupVersionKind]<-chan interface{}
+	queue      workqueue.RateLimitingInterface
+	scheme     *runtime.Scheme
 }
 
 func New(name string, cache cache.Cache, scheme *runtime.Scheme) Controller {
@@ -35,7 +36,7 @@ func New(name string, cache cache.Cache, scheme *runtime.Scheme) Controller {
 	}
 }
 
-func (c *controller) Watch(obj runtime.Object, predicates ...predicate.Predicate) error {
+func (c *controller) Watch(obj runtime.Object) error {
 	gvk, err := apiutil.GVKForObject(obj, c.scheme)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func (c *controller) Watch(obj runtime.Object, predicates ...predicate.Predicate
 		return fmt.Errorf("watch obj %v more than once", gvk)
 	}
 
-	ch, err := eventsource.New(gvk, c.cache).GetEventChannel(predicates...)
+	ch, err := eventsource.New(gvk, c.cache).GetEventChannel()
 	if err != nil {
 		return err
 	}
@@ -54,8 +55,9 @@ func (c *controller) Watch(obj runtime.Object, predicates ...predicate.Predicate
 	return nil
 }
 
-func (c *controller) Start(handler handler.EventHandler, stop <-chan struct{}) {
+func (c *controller) Start(stop <-chan struct{}, handler handler.EventHandler, predicates ...predicate.Predicate) {
 	c.handler = handler
+	c.predicates = predicates
 	c.queue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), c.name)
 
 	var wg wait.Group
@@ -120,13 +122,29 @@ func (c *controller) processNextEvent() {
 	var result handler.Result
 	switch e := o.(type) {
 	case event.CreateEvent:
+		for _, p := range c.predicates {
+			if p.IgnoreCreate(e) {
+				return
+			}
+		}
 		result, err = c.handler.OnCreate(e)
 	case event.UpdateEvent:
+		for _, p := range c.predicates {
+			if p.IgnoreUpdate(e) {
+				return
+			}
+		}
 		result, err = c.handler.OnUpdate(e)
 	case event.DeleteEvent:
+		for _, p := range c.predicates {
+			if p.IgnoreDelete(e) {
+				return
+			}
+		}
 		result, err = c.handler.OnDelete(e)
 	case event.GenericEvent:
 		result, err = c.handler.OnGeneric(e)
+
 	default:
 		panic(fmt.Sprintf("unkown event [%v]", reflect.TypeOf(o).Name()))
 	}

@@ -6,7 +6,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/cloudlinker/kubecarve/cache"
-	"github.com/cloudlinker/kubecarve/predicate"
 )
 
 const (
@@ -27,14 +26,14 @@ func New(gvk schema.GroupVersionKind, cache cache.Cache) EventSource {
 	}
 }
 
-func (l *resourceEventSource) GetEventChannel(predicates ...predicate.Predicate) (<-chan interface{}, error) {
+func (l *resourceEventSource) GetEventChannel() (<-chan interface{}, error) {
 	i, err := l.cache.GetInformerForKind(l.gvk)
 	if err != nil {
 		return nil, err
 	}
 
 	ch := make(chan interface{})
-	i.AddEventHandler(newHandlerAdaptor(predicates, ch))
+	i.AddEventHandler(newHandlerAdaptor(ch))
 	return ch, nil
 }
 

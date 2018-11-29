@@ -8,6 +8,6 @@ import (
 )
 
 type Controller interface {
-	Watch(obj runtime.Object, predicates ...predicate.Predicate) error
-	Start(handler handler.EventHandler, stop <-chan struct{})
+	Watch(obj runtime.Object) error
+	Start(stop <-chan struct{}, handler handler.EventHandler, predicates ...predicate.Predicate)
 }
